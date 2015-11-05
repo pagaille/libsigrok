@@ -12,7 +12,7 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
@@ -25,12 +25,67 @@
  *
  * 6000 counts (5 5-6 digits)
  *
- *	- Package: QFP-64
- *	- Communication parameters: Unidirectional, 2400/8n1
- *	- Protocol looks closely to the fs9721 but with 15 bytes and reversed nibbles.
+ *  - Package: QFP-64
+ *  - Communication parameters: Unidirectional, 2400/8n1
+ *  - Protocol looks closely to the fs9721 but with 15 bytes and reversed nibbles.
  *
+ * Decoding table :
+ *
+ * +======+==========+=============+=========+=========+============+
+ * | Byte | Bits 7-4 |    Bit 3    |  Bit 2  |  Bit 1  |   Bit 0    |
+ * +======+==========+=============+=========+=========+============+
+ * |    0 | 0x1      | RS232       | Auto    | DC      | AC         |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    1 | 0x2      | 4A          | 4F      | 4E      | - (minus)  |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    2 | 0x3      | 4B          | 4G      | 4C      | 4D         |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    3 | 0x4      | 3A          | 3F      | 3E      | DP1        |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    4 | 0x5      | 3B          | 3G      | 3C      | 3D         |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    5 | 0x6      | 2A          | 2F      | 2E      | DP2        |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    6 | 0x7      | 2B          | 2G      | 2C      | 2D         |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    7 | 0x8      | 1A          | 1F      | 1E      | DP3        |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    8 | 0x9      | 1B          | 1G      | 1C      | 1D         |
+ * +------+----------+-------------+---------+---------+------------+
+ * |    9 | 0xa      | Diode       | k       | n       | u          |
+ * +------+----------+-------------+---------+---------+------------+
+ * |   10 | 0xb      | Beep        | M       |  %      | m          |
+ * +------+----------+-------------+---------+---------+------------+
+ * |   11 | 0xc      | Hold        | Rel     | Ohms    | Farads     |
+ * +------+----------+-------------+---------+---------+------------+
+ * |   12 | 0xd      | Low battery | Hz      | V       | A          |
+ * +------+----------+-------------+---------+---------+------------+
+ * |   13 | 0xe      | c2c1_00     | c2c1_01 | Celcius | Fahrenheit |
+ * +------+----------+-------------+---------+---------+------------+
+ * |   14 | 0xf      | Max         | Min-Max | Min     | Auto-Off   |
+ * +------+----------+-------------+---------+---------+------------+
  */
- 
+
+//  LCD truth table 
+//  Segments denomination follows the standardised definition (see https://en.wikipedia.org/wiki/Seven-segment_display)
+//  
+//  +--------------------------------+
+//  |Digit|A|F|E|(n/a)|B|G|C|D|Result|
+//  +--------------------------------+
+//  |0    |1|1|1|0    |1|0|1|1|0xeb  |
+//  |1    |0|0|0|0    |1|0|1|0|0x0a  |
+//  |2    |1|0|1|0    |1|1|0|1|0xad  |
+//  |3    |1|0|0|0    |1|1|1|1|0x8f  |
+//  |4    |0|1|0|0    |1|1|1|0|0x4e  |
+//  |5    |1|1|0|0    |0|1|1|1|0xc7  |
+//  |6    |1|1|1|0    |0|1|1|1|0xe7  |
+//  |7    |1|0|0|0    |1|0|1|0|0x8a  |
+//  |8    |1|1|1|0    |1|1|1|1|0xef  |
+//  |9    |1|1|0|0    |1|1|1|1|0xcf  |
+//  |L    |0|1|1|0    |0|0|0|1|0x61  |
+//  +--------------------------------+
+
+
 #include <config.h>
 #include <string.h>
 #include <ctype.h>
@@ -78,7 +133,7 @@ static gboolean sync_nibbles_valid(const uint8_t *buf)
 	for (i = 0; i < DTM0660_PACKET_SIZE; i++) {
 		if (((buf[i] >> 4) & 0x0f) != (i + 1)) {
 			sr_dbg("Sync nibble in byte %d (0x%02x) is invalid.",
-				   i, buf[i]);
+			       i, buf[i]);
 			return FALSE;
 		}
 	}
@@ -156,7 +211,7 @@ static int parse_value(const uint8_t *buf, float *result)
 
 	/* Check for "OL". */
 	if (digit_bytes[0] == 0x00 && digit_bytes[1] == 0xeb &&
-		digit_bytes[2] == 0x61 && digit_bytes[3] == 0x00) {
+	    digit_bytes[2] == 0x61 && digit_bytes[3] == 0x00) {
 		sr_spew("Over limit.");
 		*result = INFINITY;
 		return SR_OK;
@@ -204,49 +259,49 @@ static int parse_value(const uint8_t *buf, float *result)
 static void parse_flags(const uint8_t *buf, struct dtm0660_info *info)
 {
 	/* Byte 0: LCD SEG1 */
-	info->is_ac			= (buf[0] & (1 << 0)) != 0;
-	info->is_dc			= (buf[0] & (1 << 1)) != 0;
-	info->is_auto		= (buf[0] & (1 << 2)) != 0;
-	info->is_rs232		= (buf[0] & (1 << 3)) != 0;
+	info->is_ac         = (buf[0] & (1 << 0)) != 0;
+	info->is_dc         = (buf[0] & (1 << 1)) != 0;
+	info->is_auto       = (buf[0] & (1 << 2)) != 0;
+	info->is_rs232      = (buf[0] & (1 << 3)) != 0;
 
 	/* Byte 1: LCD SEG2 */
-	info->is_sign		= (buf[1] & (1 << 0)) != 0;
+	info->is_sign       = (buf[1] & (1 << 0)) != 0;
 
 	/* Byte 9: LCD SEG10 */
-	info->is_micro		= (buf[9] & (1 << 0)) != 0;
-	info->is_nano		= (buf[9] & (1 << 1)) != 0;
-	info->is_kilo		= (buf[9] & (1 << 2)) != 0;
-	info->is_diode		= (buf[9] & (1 << 3)) != 0;
+	info->is_micro      = (buf[9] & (1 << 0)) != 0;
+	info->is_nano       = (buf[9] & (1 << 1)) != 0;
+	info->is_kilo       = (buf[9] & (1 << 2)) != 0;
+	info->is_diode      = (buf[9] & (1 << 3)) != 0;
 
 	/* Byte 10: LCD SEG11 */
-	info->is_milli		= (buf[10] & (1 << 0)) != 0;
-	info->is_percent	= (buf[10] & (1 << 1)) != 0;
-	info->is_mega		= (buf[10] & (1 << 2)) != 0;
-	info->is_beep		= (buf[10] & (1 << 3)) != 0;
+	info->is_milli      = (buf[10] & (1 << 0)) != 0;
+	info->is_percent    = (buf[10] & (1 << 1)) != 0;
+	info->is_mega       = (buf[10] & (1 << 2)) != 0;
+	info->is_beep       = (buf[10] & (1 << 3)) != 0;
 
 	/* Byte 11: LCD SEG12 */
-	info->is_farad		= (buf[11] & (1 << 0)) != 0;
-	info->is_ohm		= (buf[11] & (1 << 1)) != 0;
-	info->is_rel		= (buf[11] & (1 << 2)) != 0;
-	info->is_hold		= (buf[11] & (1 << 3)) != 0;
+	info->is_farad      = (buf[11] & (1 << 0)) != 0;
+	info->is_ohm        = (buf[11] & (1 << 1)) != 0;
+	info->is_rel        = (buf[11] & (1 << 2)) != 0;
+	info->is_hold       = (buf[11] & (1 << 3)) != 0;
 
 	/* Byte 12: LCD SEG13 */
-	info->is_ampere		= (buf[12] & (1 << 0)) != 0;
-	info->is_volt		= (buf[12] & (1 << 1)) != 0;
-	info->is_hz			= (buf[12] & (1 << 2)) != 0;
-	info->is_bat		= (buf[12] & (1 << 3)) != 0;
+	info->is_ampere     = (buf[12] & (1 << 0)) != 0;
+	info->is_volt       = (buf[12] & (1 << 1)) != 0;
+	info->is_hz         = (buf[12] & (1 << 2)) != 0;
+	info->is_bat        = (buf[12] & (1 << 3)) != 0;
 
 	/* Byte 13: LCD SEG14  */
-	info->is_degf		= (buf[13] & (1 << 0)) != 0;
-	info->is_degc		= (buf[13] & (1 << 1)) != 0;
-	info->is_c2c1_00	= (buf[13] & (1 << 2)) != 0;
-	info->is_c2c1_01	= (buf[13] & (1 << 3)) != 0;
-	
-	/* Byte 14: LCD SEG15  */
-	info->is_apo		= (buf[14] & (1 << 0)) != 0;
-	info->is_min		= (buf[14] & (1 << 1)) != 0;
-	info->is_minmax		= (buf[14] & (1 << 2)) != 0;
-	info->is_max		= (buf[14] & (1 << 3)) != 0;
+	info->is_degf       = (buf[13] & (1 << 0)) != 0;
+	info->is_degc       = (buf[13] & (1 << 1)) != 0;
+	info->is_c2c1_00    = (buf[13] & (1 << 2)) != 0;
+	info->is_c2c1_01    = (buf[13] & (1 << 3)) != 0;
+    
+    /* Byte 14: LCD SEG15  */
+    info->is_apo        = (buf[14] & (1 << 0)) != 0;
+    info->is_min        = (buf[14] & (1 << 1)) != 0;
+    info->is_minmax     = (buf[14] & (1 << 2)) != 0;
+    info->is_max        = (buf[14] & (1 << 3)) != 0;
 }
 
 static void handle_flags(struct sr_datafeed_analog_old *analog, float *floatval,
@@ -297,18 +352,18 @@ static void handle_flags(struct sr_datafeed_analog_old *analog, float *floatval,
 	if (info->is_percent) {
 		analog->mq = SR_MQ_DUTY_CYCLE;
 		analog->unit = SR_UNIT_PERCENTAGE;
-	}
+    }
 
-	if (info->is_degc) {
-		analog->mq = SR_MQ_TEMPERATURE;
-		analog->unit = SR_UNIT_CELSIUS;
-	}
-	
-	if (info->is_degf) {
-		analog->mq = SR_MQ_TEMPERATURE;
-		analog->unit = SR_UNIT_FAHRENHEIT;
-	}
-	
+    if (info->is_degc) {
+        analog->mq = SR_MQ_TEMPERATURE;
+        analog->unit = SR_UNIT_CELSIUS;
+    }
+    
+    if (info->is_degf) {
+        analog->mq = SR_MQ_TEMPERATURE;
+        analog->unit = SR_UNIT_FAHRENHEIT;
+    }
+    
 	/* Measurement related flags */
 	if (info->is_ac)
 		analog->mqflags |= SR_MQFLAG_AC;
@@ -322,22 +377,22 @@ static void handle_flags(struct sr_datafeed_analog_old *analog, float *floatval,
 		analog->mqflags |= SR_MQFLAG_HOLD;
 	if (info->is_rel)
 		analog->mqflags |= SR_MQFLAG_RELATIVE;
-	if (info->is_min)
-		analog->mqflags |= SR_MQFLAG_MIN;
-	if (info->is_max)
-		analog->mqflags |= SR_MQFLAG_MAX;
-	
+    if (info->is_min)
+        analog->mqflags |= SR_MQFLAG_MIN;
+    if (info->is_max)
+        analog->mqflags |= SR_MQFLAG_MAX;
+    
 
 	/* Other flags */
 	if (info->is_rs232)
 		sr_spew("RS232 enabled.");
 	if (info->is_bat)
 		sr_spew("Battery is low.");
-	if (info->is_apo)
-		sr_spew("Auto power-off mode is active.");
-	if (info->is_minmax)
-		sr_spew("Min Max mode active.");
-	if (info->is_c2c1_00)
+    if (info->is_apo)
+        sr_spew("Auto power-off mode is active.");
+    if (info->is_minmax)
+        sr_spew("Min Max mode active.");
+    if (info->is_c2c1_00)
 		sr_spew("User-defined LCD symbol 0 is active.");
 	if (info->is_c2c1_01)
 		sr_spew("User-defined LCD symbol 1 is active.");
@@ -357,18 +412,18 @@ SR_PRIV gboolean sr_dtm0660_packet_valid(const uint8_t *buf)
  *
  * @param buf Buffer containing the 15-byte protocol packet. Must not be NULL.
  * @param floatval Pointer to a float variable. That variable will contain the
- *				   result value upon parsing success. Must not be NULL.
+ *                 result value upon parsing success. Must not be NULL.
  * @param analog Pointer to a struct sr_datafeed_analog_old. The struct will be
- *				 filled with data according to the protocol packet.
- *				 Must not be NULL.
+ *               filled with data according to the protocol packet.
+ *               Must not be NULL.
  * @param info Pointer to a struct dtm0660_info. The struct will be filled
- *			   with data according to the protocol packet. Must not be NULL.
+ *             with data according to the protocol packet. Must not be NULL.
  *
  * @return SR_OK upon success, SR_ERR upon failure. Upon errors, the
- *		   'analog' variable contents are undefined and should not be used.
+ *         'analog' variable contents are undefined and should not be used.
  */
 SR_PRIV int sr_dtm0660_parse(const uint8_t *buf, float *floatval,
-				struct sr_datafeed_analog_old *analog, void *info)
+			    struct sr_datafeed_analog_old *analog, void *info)
 {
 	int ret;
 	struct dtm0660_info *info_local;
